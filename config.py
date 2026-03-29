@@ -23,11 +23,16 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 YUNET_ONNX_PATH = MODELS_WEIGHTS_DIR / "face_detection_yunet_2023mar.onnx"
 SFACE_ONNX_PATH = MODELS_WEIGHTS_DIR / "face_recognition_sface_2021dec.onnx"
 
-# --- Staff detection (Ultralytics YOLOv11; COCO class 0 = person) ---
-# Place `yolo11n.pt` in the project root, or pass a custom path to StaffDetector.
-YOLO_WEIGHTS_PATH = PROJECT_ROOT / "yolo11n.pt"
-YOLO_PERSON_CLASS_ID = 0
-YOLO_CONFIDENCE_THRESHOLD = 0.5
+# --- Staff/Customer detection (Ultralytics YOLOv11 custom classes) ---
+# Your trained weights live at models/best.pt
+YOLO_WEIGHTS_PATH = MODELS_DIR / "best.pt"
+# Custom class mapping from your dataset
+YOLO_CLASS_NAMES = {
+    0: "Customer",
+    1: "Staff",
+}
+YOLO_STAFF_CLASS_ID = 1
+YOLO_CONFIDENCE_THRESHOLD = 0.3
 YOLO_IOU_THRESHOLD = 0.45  # built-in NMS; tune for crowded scenes
 
 # TensorRT ``.engine`` files from ``export_trt.py`` (build on target Jetson hardware)
@@ -35,7 +40,7 @@ TRT_ENGINES_DIR = MODELS_DIR / "engines"
 
 # --- Face detection (YuNet via FaceDetectorYN) ---
 YUNET_INPUT_SIZE = (640, 640)  # max side / internal resize hint; setInputSize uses frame dims
-YUNET_SCORE_THRESHOLD = 0.75
+YUNET_SCORE_THRESHOLD = 0.6
 YUNET_NMS_THRESHOLD = 0.45
 YUNET_TOP_K = 5000
 
@@ -50,9 +55,17 @@ REQUIRE_SUBFOLDERS_FOR_IDENTITIES = True
 
 # --- Matching (used when comparing embeddings; recognizer will reuse) ---
 SIMILARITY_METRIC = "cosine"  # "cosine" | "l2"
-COSINE_MATCH_THRESHOLD = 0.35  # lower distance = more similar; tune on your data
+COSINE_MATCH_THRESHOLD = 0.5  # lower distance = more similar; tune on your data
 L2_MATCH_THRESHOLD = 1.0
 
 # --- Runtime / threading (reserved for Step 4) ---
 TARGET_FRAME_HEIGHT = 720
 CAPTURE_FPS_HINT = 30
+
+# --- Debug / observability ---
+# Show match distance on the video overlay (e.g., d=0.45)
+DEBUG_SHOW_MATCH_DISTANCE = True
+# Print match distance in terminal for every detected face
+DEBUG_PRINT_MATCH_DISTANCE = True
+# If YOLO misses in a frame, run face recognition on whole frame as fallback.
+DEBUG_FALLBACK_FULL_FRAME_WHEN_NO_DETECTIONS = True

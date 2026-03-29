@@ -293,7 +293,8 @@ class FaceRecognizer:
         normalized = _normalize_person_inputs(person_boxes)
         out: List[RecognitionRecord] = []
 
-        for pbox, pscore in normalized:
+        for pbox, pscore, pclass_id, pclass_name in normalized:
+            base_label = pclass_name if pclass_name else "Unknown"
             x1, y1, x2, y2 = _clamp_xyxy(*pbox, fw, fh)
             crop = frame[y1:y2, x1:x2]
             if crop.size == 0:
@@ -301,7 +302,11 @@ class FaceRecognizer:
                     {
                         "person_box": [float(pbox[0]), float(pbox[1]), float(pbox[2]), float(pbox[3])],
                         "person_score": pscore,
-                        "label": "Unknown",
+                        "class_id": pclass_id,
+                        "class_name": pclass_name,
+                        "identity": "Unknown",
+                        "recognized": False,
+                        "label": "Unknown - Customer",
                         "face_box": None,
                         "match_distance": float("inf"),
                     }
@@ -314,7 +319,11 @@ class FaceRecognizer:
                     {
                         "person_box": [float(pbox[0]), float(pbox[1]), float(pbox[2]), float(pbox[3])],
                         "person_score": pscore,
-                        "label": "Unknown",
+                        "class_id": pclass_id,
+                        "class_name": pclass_name,
+                        "identity": "Unknown",
+                        "recognized": False,
+                        "label": "Unknown - Customer",
                         "face_box": None,
                         "match_distance": float("inf"),
                     }
@@ -336,14 +345,23 @@ class FaceRecognizer:
                 best_name is not None
                 and dist <= config.COSINE_MATCH_THRESHOLD
             ):
-                label = best_name
+                identity = best_name
+                recognized = True
             else:
-                label = "Unknown"
+                identity = "Unknown"
+                recognized = False
+
+            role = "Staff" if recognized else "Customer"
+            label = f"{identity} - {role}"
 
             out.append(
                 {
                     "person_box": [float(pbox[0]), float(pbox[1]), float(pbox[2]), float(pbox[3])],
                     "person_score": pscore,
+                    "class_id": pclass_id,
+                    "class_name": pclass_name,
+                    "identity": identity,
+                    "recognized": recognized,
                     "label": label,
                     "face_box": face_box_frame,
                     "match_distance": float(dist),
@@ -355,8 +373,8 @@ class FaceRecognizer:
 
 def _normalize_person_inputs(
     person_boxes: Sequence[Any],
-) -> List[Tuple[PersonBox, Optional[float]]]:
-    out: List[Tuple[PersonBox, Optional[float]]] = []
+) -> List[Tuple[PersonBox, Optional[float], Optional[int], Optional[str]]]:
+    out: List[Tuple[PersonBox, Optional[float], Optional[int], Optional[str]]] = []
 
     def _coerce_box(raw: Any) -> PersonBox:
         a = np.asarray(raw, dtype=np.float64).ravel()
@@ -366,12 +384,27 @@ def _normalize_person_inputs(
 
     for item in person_boxes:
         score: Optional[float] = None
+        class_id: Optional[int] = None
+        class_name: Optional[str] = None
+        if isinstance(item, dict):
+            box_src = item.get("box", item.get("person_box"))
+            if box_src is None:
+                raise ValueError("Detection dict must include 'box' or 'person_box'")
+            if item.get("score") is not None:
+                score = float(item["score"])
+            if item.get("class_id") is not None:
+                class_id = int(item["class_id"])
+            if item.get("class_name") is not None:
+                class_name = str(item["class_name"])
+            out.append((_coerce_box(box_src), score, class_id, class_name))
+            continue
+
         if isinstance(item, (list, tuple)) and len(item) == 2:
             try:
                 score = float(item[1])
-                out.append((_coerce_box(item[0]), score))
+                out.append((_coerce_box(item[0]), score, class_id, class_name))
                 continue
             except (TypeError, ValueError):
                 pass
-        out.append((_coerce_box(item), None))
+        out.append((_coerce_box(item), None, class_id, class_name))
     return out

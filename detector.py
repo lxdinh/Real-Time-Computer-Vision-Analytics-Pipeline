@@ -1,14 +1,14 @@
 """
-Person / staff detection using Ultralytics YOLOv11.
+Staff/Customer detection using Ultralytics YOLOv11.
 
-Filters to COCO class ``person`` (ID 0) only. Tuned for low-latency use inside a
-tight video loop (single-frame inference, no verbose logging).
+Returns per-detection metadata with custom class mapping so downstream code can
+display correct labels and run face recognition only for staff class.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -17,17 +17,17 @@ import config
 # OpenCV BGR ndarray or path accepted by ultralytics internally; we only pass ndarray.
 Frame = np.ndarray
 BoxXYXY = List[float]  # [x1, y1, x2, y2]
-Detection = Tuple[BoxXYXY, float]
+Detection = Dict[str, Any]
 
 
 class StaffDetector:
     """
-    Wraps YOLOv11 for single-class (person) detection.
+    Wraps YOLOv11 for custom-class detection (Customer/Staff).
 
     Parameters
     ----------
     weights_path
-        Path to ``yolo11n.pt``. Defaults to ``config.YOLO_WEIGHTS_PATH``.
+        Path to model weights. Defaults to ``config.YOLO_WEIGHTS_PATH``.
     conf
         Minimum confidence. Defaults to ``config.YOLO_CONFIDENCE_THRESHOLD`` or 0.5.
     iou
@@ -56,7 +56,12 @@ class StaffDetector:
         self._iou = (
             iou if iou is not None else getattr(config, "YOLO_IOU_THRESHOLD", 0.45)
         )
-        self._person_class = getattr(config, "YOLO_PERSON_CLASS_ID", 0)
+        self._class_names = getattr(
+            config,
+            "YOLO_CLASS_NAMES",
+            {0: "Customer", 1: "Staff"},
+        )
+        self._allowed_class_ids = sorted(int(k) for k in self._class_names.keys())
         self._device = device
 
         self._model = YOLO(str(path))
@@ -73,21 +78,25 @@ class StaffDetector:
 
     def detect(self, frame: Frame) -> List[Detection]:
         """
-        Run inference on one BGR frame and return person boxes only.
+        Run inference on one BGR frame and return custom-class detections.
 
         Returns
         -------
-        list of ( [x1, y1, x2, y2], confidence )
-            Pixel coordinates in the same space as ``frame`` (xyxy, inclusive-style).
+        list of dict
+            Each item has:
+            - box: [x1, y1, x2, y2]
+            - score: confidence
+            - class_id: integer class id
+            - class_name: display label
         """
         if frame is None or frame.size == 0:
             return []
 
-        # classes=[0] => only "person" in COCO; skips decoding other heads earlier
+        # Restrict decode to relevant classes for lower overhead.
         kwargs = {
             "conf": self._conf,
             "iou": self._iou,
-            "classes": [self._person_class],
+            "classes": self._allowed_class_ids,
             "verbose": False,
             "stream": False,
         }
@@ -108,9 +117,17 @@ class StaffDetector:
             clss = boxes.cls.cpu().numpy().astype(int)
 
             for i in range(len(boxes)):
-                if clss[i] != self._person_class:
+                class_id = int(clss[i])
+                if class_id not in self._class_names:
                     continue
                 box = [float(xyxy[i, j]) for j in range(4)]
                 score = float(confs[i])
-                out.append((box, score))
+                out.append(
+                    {
+                        "box": box,
+                        "score": score,
+                        "class_id": class_id,
+                        "class_name": str(self._class_names[class_id]),
+                    }
+                )
         return out
