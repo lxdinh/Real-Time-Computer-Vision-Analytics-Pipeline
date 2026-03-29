@@ -1,0 +1,4 @@
+# Step 1 baseline; extend in later steps (ultralytics, tensorrt, etc.)
+numpy>=1.23
+opencv-contrib-python>=4.8.0
+ultralytics>=8.3.0

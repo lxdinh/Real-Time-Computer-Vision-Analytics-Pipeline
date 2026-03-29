@@ -1,0 +1,23 @@
+__pycache__/
+
+# YOLO / OpenCV heavy artifacts
+models/*.pt
+models/*.onnx
+models/weights/
+models/**/*.pt
+models/**/*.onnx
+models/engines/
+
+# Dataset + face gallery (large)
+data/
+known_faces/
+
+# Ultralytics outputs during training
+runs/
+
+# Virtual environments
+venv/
+.venv/
+
+# YOLO checkpoint weight (keep local only)
+yolo11n.pt
